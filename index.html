@@ -345,7 +345,9 @@ dialog a{color:inherit}
     const n = new Date();
     return Math.floor((Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()) - EPOCH) / 864e5) + 1;
   }
-  function start() {
+  // В тренировке у 4 и 5 букв своя текущая партия: переключение режима или длины к ней возвращает,
+  // новое задание — только по кнопке «Ещё задание».
+  function start(forceNew) {
     typed = "";
     if (mode === "daily") {
       const id = dayNumber();
@@ -356,14 +358,25 @@ dialog a{color:inherit}
         S.chain = saved.chain || []; S.status = saved.status || "play"; S.counted = saved.counted; S.hints = saved.hints || [];
       }
     } else {
-      const p = makePuzzle(L, Math.random);
-      S = { id: "p", ...p, chain: [], status: "play", hints: [] };
+      const saved = forceNew ? null : store.get("practice:" + L, null);
+      if (saved && saved.start && DATA[L].allowed.has(saved.start) && DATA[L].allowed.has(saved.target)) {
+        S = { id: "p", start: saved.start, target: saved.target, par: saved.par, solution: saved.solution,
+              chain: saved.chain || [], status: saved.status || "play", hints: saved.hints || [] };
+      } else {
+        const p = makePuzzle(L, Math.random);
+        S = { id: "p", ...p, chain: [], status: "play", hints: [] };
+      }
     }
     S.distT = bfs(DATA[L].graph, S.target).dist;   // расстояния до цели — для подсказок
     hintOpen = false;
+    save();
     setButtons(); render();
   }
   function save() {
+    if (mode === "practice") {
+      store.set("practice:" + L, { start: S.start, target: S.target, par: S.par, solution: S.solution, chain: S.chain, status: S.status, hints: S.hints });
+      return;
+    }
     if (mode !== "daily") return;
     store.set("day:" + L, { id: S.id, start: S.start, target: S.target, chain: S.chain, status: S.status, counted: !!S.counted, hints: S.hints });
   }
@@ -630,11 +643,11 @@ dialog a{color:inherit}
     $("len4").setAttribute("aria-pressed", L === 4);
     $("len5").setAttribute("aria-pressed", L === 5);
   }
-  $("modeDaily").addEventListener("click", () => { mode = "daily"; start(); });
-  $("modePractice").addEventListener("click", () => { mode = "practice"; start(); });
-  $("len4").addEventListener("click", () => { L = 4; store.set("len", 4); start(); });
-  $("len5").addEventListener("click", () => { L = 5; store.set("len", 5); start(); });
-  $("againBtn").addEventListener("click", () => { mode = "practice"; start(); });
+  $("modeDaily").addEventListener("click", () => { if (mode === "daily") return; mode = "daily"; start(); });
+  $("modePractice").addEventListener("click", () => { if (mode === "practice") return; mode = "practice"; start(); });
+  $("len4").addEventListener("click", () => { if (L === 4) return; L = 4; store.set("len", 4); start(); });
+  $("len5").addEventListener("click", () => { if (L === 5) return; L = 5; store.set("len", 5); start(); });
+  $("againBtn").addEventListener("click", () => { const fresh = mode === "practice"; mode = "practice"; start(fresh); });
   $("undoBtn").addEventListener("click", undo);
   $("giveUpBtn").addEventListener("click", giveUp);
   $("hintBtn").addEventListener("click", () => { hintOpen = !hintOpen; renderHints(); keepInputVisible(); });
